@@ -1,30 +1,38 @@
 import asyncio
 import logging
 import pickle
+import struct
 
 from rich.logging import RichHandler
-from tornado.iostream import StreamClosedError
+from tornado.iostream import IOStream, StreamClosedError
 from tornado.tcpserver import TCPServer
 
 logging.basicConfig(
-    level="DEBUG", format="%(message)s", datefmt="[%X]", handlers=[RichHandler()]
+    level="DEBUG",
+    format="[pid=%(process)d] %(message)s",
+    datefmt="[%X]",
+    handlers=[RichHandler()],
 )
 
 
 class LogServer(TCPServer):
-    async def handle_stream(self, stream, address: str = "localhost"):
+    async def handle_stream(self, stream: IOStream, address: str = "localhost"):
         while True:
             try:
-                data = await stream.read_until(b"\n")
-                record = self.deserialize(data)
+                chunk = await stream.read_bytes(4)
+                if len(chunk) < 4:
+                    break
+                struct_length = struct.unpack(">L", chunk)[0]
+                chunk = await stream.read_bytes(struct_length)
 
-                if self.logger_name is not None:
-                    name = self.logger_name
-                else:
-                    name = record.name
+                obj = self.deserialize(chunk)
+                record = logging.makeLogRecord(obj)
 
-                logger = logging.getLogger(name)
-                logger.handle(record)
+                if isinstance(record, logging.LogRecord):
+                    logger = logging.getLogger(
+                        getattr(self, "logger_name", record.name)
+                    )
+                    logger.handle(record)
 
             except StreamClosedError:
                 break
