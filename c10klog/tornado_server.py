@@ -39,11 +39,27 @@ class LogServer(TCPServer):
             except BadChunkException:
                 break
 
-    def deserialize(self, data):
+    def deserialize(self, data: bytes):
+        """Deserialize a log record instance.
+
+        Args:
+            data: A bunch of bytes representing a LogRecord
+
+        Returns:
+            A deserialized LogRecord instance
+        """
         return pickle.loads(data)
 
-    async def read_logs_from_stream(self, stream) -> logging.LogRecord:
-        # First four bytes are the length of the serialized LogRecord
+    async def read_logs_from_stream(self, stream: IOStream) -> logging.LogRecord:
+        """Read serialized LogRecords from a stream.
+
+        Args:
+            stream: Stream containing serialized LogRecords. The first four bytes are the length of
+            the serialized LogRecord.
+
+        Returns:
+            The next log record read from the stream
+        """
         chunk = await stream.read_bytes(4)
         if len(chunk) < 4:
             driver_logger.error("Couldn't read a chunk")
